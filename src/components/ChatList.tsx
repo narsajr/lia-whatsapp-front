@@ -43,13 +43,22 @@ const ChatList: React.FC<ChatListProps> = ({
 
   // Filter and search logic
   const processedChats = useMemo(() => {
+    // Safety check for chats array
+    if (!Array.isArray(chats)) {
+      return [];
+    }
+    
     let result = [...chats];
 
     // Filter out archived chats for main list
-    result = result.filter(chat => !chat.archived);
+    result = result.filter(chat => chat && !chat.archived);
 
-    // Sort by timestamp (most recent first)
-    result.sort((a, b) => b.timestamp - a.timestamp);
+    // Sort by timestamp (most recent first) with safety check
+    result.sort((a, b) => {
+      const aTime = a?.timestamp || 0;
+      const bTime = b?.timestamp || 0;
+      return bTime - aTime;
+    });
 
     // Apply search filter
     if (searchQuery.trim()) {
@@ -57,21 +66,39 @@ const ChatList: React.FC<ChatListProps> = ({
       
       // First, filter existing chats
       const filteredChats = result.filter(chat => {
+        if (!chat) return false;
+        
         const chatId = getChatId(chat);
         const name = chat.name || chatId;
         const lastMessage = chat.lastMessage?.body || '';
-        return name.toLowerCase().includes(query) ||
-               lastMessage.toLowerCase().includes(query) ||
-               chatId.includes(query);
+        
+        try {
+          return name.toLowerCase().includes(query) ||
+                 lastMessage.toLowerCase().includes(query) ||
+                 chatId.toLowerCase().includes(query);
+        } catch (error) {
+          console.warn('Error filtering chat:', error, chat);
+          return false;
+        }
       });
 
       // Then, search contacts that aren't in chats
-      const contactsNotInChats = contacts.filter(contact => {
-        const isInChats = result.some(chat => getChatId(chat) === contact.id._serialized);
-        const contactName = getContactDisplayName(contact);
-        const matchesQuery = contactName.toLowerCase().includes(query) ||
-                           contact.id._serialized.includes(query);
-        return !isInChats && matchesQuery && contact.isMyContact;
+      const contactsNotInChats = (Array.isArray(contacts) ? contacts : []).filter(contact => {
+        // Safety check for contact and contact.id
+        if (!contact || !contact.id || !contact.id._serialized) {
+          return false;
+        }
+        
+        try {
+          const isInChats = result.some(chat => getChatId(chat) === contact.id._serialized);
+          const contactName = getContactDisplayName(contact);
+          const matchesQuery = contactName.toLowerCase().includes(query) ||
+                             contact.id._serialized.toLowerCase().includes(query);
+          return !isInChats && matchesQuery && contact.isMyContact;
+        } catch (error) {
+          console.warn('Error filtering contact:', error, contact);
+          return false;
+        }
       });
 
       // Convert contacts to chat objects
@@ -168,13 +195,19 @@ const ChatList: React.FC<ChatListProps> = ({
 
   // Helper function to safely extract chat ID as string
   const getChatId = (chat: Chat): string => {
+    if (!chat || !chat.id) {
+      return '';
+    }
+    
     if (typeof chat.id === 'string') {
       return chat.id;
     }
+    
     // If id is an object, try to get _serialized property
     if (chat.id && typeof chat.id === 'object' && '_serialized' in chat.id) {
-      return (chat.id as any)._serialized;
+      return (chat.id as any)._serialized || '';
     }
+    
     return String(chat.id || '');
   };
 
@@ -186,12 +219,17 @@ const ChatList: React.FC<ChatListProps> = ({
 
   // Helper function to get the best display name for a contact
   const getContactDisplayName = (contact: Contact): string => {
+    // Safety check for contact
+    if (!contact) {
+      return 'Contato Desconhecido';
+    }
+    
     // Priority order: formattedName > name > pushname > shortName > phone number
     return contact.formattedName ||
            contact.name ||
            contact.pushname ||
            contact.shortName ||
-           contact.id._serialized.replace(/[@c.us,@g.us]/g, '');
+           (contact.id?._serialized?.replace(/[@c.us,@g.us]/g, '') || 'Contato');
   };
 
   // Helper function to get chat display name with contact info
@@ -205,7 +243,9 @@ const ChatList: React.FC<ChatListProps> = ({
     
     // Try to find the contact in our contacts list
     const chatId = getChatId(chat);
-    const matchingContact = contacts.find(contact => contact.id._serialized === chatId);
+    const matchingContact = contacts.find(contact =>
+      contact && contact.id && contact.id._serialized === chatId
+    );
     if (matchingContact) {
       return getContactDisplayName(matchingContact);
     }

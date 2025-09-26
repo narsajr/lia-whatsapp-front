@@ -501,8 +501,13 @@ class WppConnectAPI {
   }
 
   private clearLocalData(): void {
-    localStorage.removeItem('wpp_session');
-    localStorage.removeItem('wpp_token');
+    // Clear session-specific localStorage data
+    const uniqueSessionId = localStorage.getItem('wpp_unique_session_id');
+    if (uniqueSessionId) {
+      localStorage.removeItem(`wpp_session_${uniqueSessionId}`);
+      localStorage.removeItem(`wpp_token_${uniqueSessionId}`);
+    }
+    localStorage.removeItem('wpp_unique_session_id');
     this.disconnectSocket();
     this.session = '';
     this.token = '';

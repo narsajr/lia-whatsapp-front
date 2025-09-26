@@ -8,6 +8,7 @@ import { darkTheme } from './styles/theme';
 import ChatList from './components/ChatList';
 import ChatArea from './components/ChatArea';
 import UserSettings from './components/UserSettings';
+import SessionInfo from './components/SessionInfo';
 import wppAPI from './services/api';
 
 import { 
@@ -238,13 +239,19 @@ const App: React.FC = () => {
       console.log('Starting session with name:', sessionName);
       setUIState(prev => ({ ...prev, isLoading: true }));
       
+      // Get unique session ID for localStorage keys
+      const uniqueSessionId = localStorage.getItem('wpp_unique_session_id') || sessionName;
+      const sessionStorageKey = `wpp_session_${uniqueSessionId}`;
+      const tokenStorageKey = `wpp_token_${uniqueSessionId}`;
+      
       // First generate token
       const secretKey = 'THISISMYSECURETOKEN'; // In production, this should be from environment
       const tokenResponse = await wppAPI.generateToken(sessionName, secretKey);
       console.log('Token generated:', JSON.stringify(tokenResponse, null, 2));
       
       if (tokenResponse.token) {
-        localStorage.setItem('wpp_token', tokenResponse.token);
+        localStorage.setItem(tokenStorageKey, tokenResponse.token);
+        localStorage.setItem(sessionStorageKey, sessionName);
         wppAPI.setSession(sessionName, tokenResponse.token);
         
         // Start session
@@ -368,10 +375,40 @@ const App: React.FC = () => {
     }
   }, [startSessionWithSession, loadInitialData]);
 
+  // Generate unique session ID for this user/device
+  const generateSessionId = useCallback(() => {
+    // Try to get existing session ID from localStorage first
+    let sessionId = localStorage.getItem('wpp_unique_session_id');
+    
+    if (!sessionId) {
+      // Generate a unique session ID combining timestamp and random string
+      const timestamp = Date.now().toString(36);
+      const randomStr = Math.random().toString(36).substring(2, 15);
+      const browserFingerprint = navigator.userAgent.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+      
+      sessionId = `session_${timestamp}_${randomStr}_${browserFingerprint}`.toLowerCase();
+      
+      // Store the generated session ID
+      localStorage.setItem('wpp_unique_session_id', sessionId);
+      console.log('Generated new unique session ID:', sessionId);
+    } else {
+      console.log('Using existing session ID:', sessionId);
+    }
+    
+    return sessionId;
+  }, []);
+
   // Initialize session on mount
   const initializeSession = useCallback(() => {
-    const storedSession = localStorage.getItem('wpp_session') || 'default';
-    const storedToken = localStorage.getItem('wpp_token');
+    // Generate unique session ID for this user
+    const uniqueSessionId = generateSessionId();
+    
+    // Use unique keys for this session in localStorage
+    const sessionStorageKey = `wpp_session_${uniqueSessionId}`;
+    const tokenStorageKey = `wpp_token_${uniqueSessionId}`;
+    
+    const storedSession = localStorage.getItem(sessionStorageKey) || uniqueSessionId;
+    const storedToken = localStorage.getItem(tokenStorageKey);
     
     setSession(storedSession);
     
@@ -382,7 +419,7 @@ const App: React.FC = () => {
       // Start authentication flow
       startSessionWithSession(storedSession);
     }
-  }, [checkConnectionWithSession, startSessionWithSession]);
+  }, [generateSessionId, checkConnectionWithSession, startSessionWithSession]);
 
   useEffect(() => {
     initializeSession();
@@ -650,6 +687,15 @@ const App: React.FC = () => {
   const handleLogout = useCallback(async () => {
     try {
       await wppAPI.logout({ force: false, clearData: true });
+      
+      // Clear session-specific localStorage data
+      const uniqueSessionId = localStorage.getItem('wpp_unique_session_id');
+      if (uniqueSessionId) {
+        localStorage.removeItem(`wpp_session_${uniqueSessionId}`);
+        localStorage.removeItem(`wpp_token_${uniqueSessionId}`);
+      }
+      localStorage.removeItem('wpp_unique_session_id');
+      
       setIsAuthenticated(false);
       setSession('');
       setCurrentUser(undefined);
@@ -694,6 +740,15 @@ const App: React.FC = () => {
   const handleForceLogout = useCallback(async () => {
     try {
       await wppAPI.forceLogout();
+      
+      // Clear session-specific localStorage data
+      const uniqueSessionId = localStorage.getItem('wpp_unique_session_id');
+      if (uniqueSessionId) {
+        localStorage.removeItem(`wpp_session_${uniqueSessionId}`);
+        localStorage.removeItem(`wpp_token_${uniqueSessionId}`);
+      }
+      localStorage.removeItem('wpp_unique_session_id');
+      
       setIsAuthenticated(false);
       setSession('');
       setCurrentUser(undefined);
@@ -715,6 +770,13 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Error during force logout:', error);
       // Force logout should still clear local data even if it fails
+      const uniqueSessionId = localStorage.getItem('wpp_unique_session_id');
+      if (uniqueSessionId) {
+        localStorage.removeItem(`wpp_session_${uniqueSessionId}`);
+        localStorage.removeItem(`wpp_token_${uniqueSessionId}`);
+      }
+      localStorage.removeItem('wpp_unique_session_id');
+      
       setIsAuthenticated(false);
       setSession('');
       setCurrentUser(undefined);
@@ -828,6 +890,11 @@ const App: React.FC = () => {
             <h1 style={{ marginBottom: '24px', color: darkTheme.colors.text }}>
               WhatsApp Web
             </h1>
+            
+            <SessionInfo
+              sessionId={session}
+              onCopy={() => toast.info('ID da sessão copiado!')}
+            />
             
             {(sessionStatus.status === 'AUTHENTICATING' || sessionStatus.status === 'INITIALIZING' || sessionStatus.status === 'CLOSED') && qrCode && (
               <>
