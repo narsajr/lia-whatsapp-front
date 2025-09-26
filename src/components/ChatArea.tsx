@@ -310,7 +310,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({
 
   const stopRecording = async () => {
     try {
-      const [buffer, blob] = await recorderRef.current!.stop().getMp3();
+      const [, blob] = await recorderRef.current!.stop().getMp3();
       setIsRecording(false);
       
       if (recordingTime >= 1) {

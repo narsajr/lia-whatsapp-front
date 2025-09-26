@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Play, Pause, Download, Reply, MoreHorizontal } from 'lucide-react';
 import styled from 'styled-components';
 import { Message } from '../types';
@@ -160,7 +160,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onDownload
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [audioProgress, setAudioProgress] = useState(0);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [mediaError, setMediaError] = useState(false);
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
@@ -202,7 +201,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   };
 
   // Fetch media from server
-  const fetchMediaFromServer = async (messageId: string) => {
+  const fetchMediaFromServer = useCallback(async (messageId: string) => {
     if (!messageId || isLoadingMedia) return;
 
     setIsLoadingMedia(true);
@@ -223,7 +222,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     } finally {
       setIsLoadingMedia(false);
     }
-  };
+  }, [isLoadingMedia]);
 
   // Effect to handle media URL resolution
   useEffect(() => {
@@ -257,13 +256,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     if (message.id) {
       fetchMediaFromServer(message.id);
     }
-  }, [message]);
-
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, [message, fetchMediaFromServer]);
 
   const handleAudioPlay = () => {
     setIsPlaying(!isPlaying);

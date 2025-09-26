@@ -48,246 +48,6 @@ const App: React.FC = () => {
   // Settings state
   const [showSettings, setShowSettings] = useState<boolean>(false);
 
-  // Initialize session on mount
-  const initializeSession = useCallback(() => {
-    const storedSession = localStorage.getItem('wpp_session') || 'default';
-    const storedToken = localStorage.getItem('wpp_token');
-    
-    setSession(storedSession);
-    
-    if (storedToken) {
-      wppAPI.setSession(storedSession, storedToken);
-      checkConnectionWithSession(storedSession);
-    } else {
-      // Start authentication flow
-      startSessionWithSession(storedSession);
-    }
-  }, []);
-
-  useEffect(() => {
-    initializeSession();
-  }, [initializeSession]);
-
-  // WebSocket listeners
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const cleanupMessage = wppAPI.onMessage((message: Message) => {
-      // Get chat ID as string from message
-      const getChatIdFromMessage = (msg: Message): string => {
-        if (typeof msg.chatId === 'string') {
-          return msg.chatId;
-        }
-        if (msg.chatId && typeof msg.chatId === 'object' && '_serialized' in msg.chatId) {
-          return (msg.chatId as any)._serialized;
-        }
-        return String(msg.chatId || '');
-      };
-
-      const chatId = getChatIdFromMessage(message);
-      const messageTimestamp = message.timestamp || message.t;
-
-      // Update chat list with new message
-      setChats(prevChats => {
-        const updatedChats = [...prevChats];
-        const chatIndex = updatedChats.findIndex(chat => {
-          const existingChatId = typeof chat.id === 'string' ? chat.id : (chat.id as any)?._serialized || String(chat.id);
-          return existingChatId === chatId;
-        });
-        
-        if (chatIndex >= 0) {
-          updatedChats[chatIndex] = {
-            ...updatedChats[chatIndex],
-            lastMessage: message,
-            timestamp: messageTimestamp,
-            unreadCount: message.fromMe ? 0 : updatedChats[chatIndex].unreadCount + 1
-          };
-          
-          // Move to top
-          const [updatedChat] = updatedChats.splice(chatIndex, 1);
-          updatedChats.unshift(updatedChat);
-        }
-        
-        return updatedChats;
-      });
-
-      // Update messages if chat is selected
-      setUIState(prev => {
-        const selectedChatId = typeof prev.selectedChat?.id === 'string'
-          ? prev.selectedChat.id
-          : (prev.selectedChat?.id as any)?._serialized || String(prev.selectedChat?.id || '');
-        
-        if (selectedChatId === chatId) {
-          return {
-            ...prev,
-            messages: [...prev.messages, message]
-          };
-        }
-        return prev;
-      });
-
-      // Show notification for new messages
-      if (!message.fromMe) {
-        console.log(message)
-        const senderName = message.senderName || message.sender?.name || message.sender?.pushname || 'Contato';
-        toast.info(`Nova mensagem de ${senderName}`);
-        
-        // Play notification sound
-        const audio = new Audio('/notification.mp3');
-        audio.play().catch(() => {
-          // Ignore if audio fails to play
-        });
-      }
-    });
-
-    const cleanupStatus = wppAPI.onConnectionStatus((status: boolean) => {
-      setIsAuthenticated(status);
-      if (!status) {
-        toast.error('Conexão perdida com o WhatsApp');
-      }
-    });
-
-    return () => {
-      cleanupMessage();
-      cleanupStatus();
-    };
-  }, [isAuthenticated]);
-
-  const startSessionWithSession = async (sessionName: string) => {
-    try {
-      console.log('Starting session with name:', sessionName);
-      setUIState(prev => ({ ...prev, isLoading: true }));
-      
-      // First generate token
-      const secretKey = 'THISISMYSECURETOKEN'; // In production, this should be from environment
-      const tokenResponse = await wppAPI.generateToken(sessionName, secretKey);
-      console.log('Token generated:', JSON.stringify(tokenResponse, null, 2));
-      
-      if (tokenResponse.token) {
-        localStorage.setItem('wpp_token', tokenResponse.token);
-        wppAPI.setSession(sessionName, tokenResponse.token);
-        
-        // Start session
-        const sessionResponse = await wppAPI.startSession(sessionName, true);
-        console.log('Session started:', JSON.stringify(sessionResponse, null, 2));
-        setSessionStatus(sessionResponse);
-        
-        // Get QR code if needed - check for any status that might need QR code
-        if (sessionResponse.status === 'AUTHENTICATING' || sessionResponse.status === 'INITIALIZING' || sessionResponse.qrcode) {
-          console.log('Getting QR code for authentication, status:', sessionResponse.status);
-          if (sessionResponse.qrcode) {
-            // Use QR code from response if available
-            setQrCode(sessionResponse.qrcode);
-          } else {
-            await getQRCodeWithSession(sessionName);
-          }
-        }
-        
-        // If session is already ready or connected, set authenticated immediately
-        if (sessionResponse.status === 'READY' || sessionResponse.status === 'CONNECTED') {
-          console.log(`Session is already ${sessionResponse.status.toLowerCase()}, authenticating immediately`);
-          setIsAuthenticated(true);
-          // Add a small delay to ensure WhatsApp is fully synchronized
-          setTimeout(() => {
-            loadInitialData();
-          }, 1000);
-          return;
-        }
-        
-        // Check status periodically - only if not already ready
-        // Always start status polling since session might transition to READY
-        {
-          let statusCheckCount = 0;
-          const maxStatusChecks = 60; // Maximum 3 minutes of checking
-          const statusInterval = setInterval(async () => {
-            try {
-              statusCheckCount++;
-              console.log(`Status check #${statusCheckCount}`);
-              
-              const status = await wppAPI.getSessionStatus(sessionName);
-              console.log('Current session status:', JSON.stringify(status, null, 2));
-              setSessionStatus(status);
-              
-              // Update QR code if it changes
-              if (status.qrcode && status.qrcode !== qrCode) {
-                setQrCode(status.qrcode);
-              }
-              
-              if (status.status === 'READY' || status.status === 'CONNECTED') {
-                console.log(`Session is ${status.status.toLowerCase()}! Setting authenticated to true`);
-                clearInterval(statusInterval);
-                setIsAuthenticated(true);
-                // Add a small delay to ensure WhatsApp is fully synchronized
-                setTimeout(() => {
-                  loadInitialData();
-                }, 1000);
-              } else if (status.status === 'CLOSED' || statusCheckCount >= maxStatusChecks) {
-                console.log('Session failed or timed out, stopping status checks');
-                clearInterval(statusInterval);
-                if (statusCheckCount >= maxStatusChecks) {
-                  toast.error('Timeout na autenticação. Tente novamente.');
-                } else if (status.status === 'CLOSED') {
-                  toast.error('Sessão foi fechada. Tente novamente.');
-                }
-              }
-            } catch (error) {
-              console.error('Status check failed:', error);
-              statusCheckCount++;
-              if (statusCheckCount >= maxStatusChecks) {
-                clearInterval(statusInterval);
-                toast.error('Erro na verificação do status da sessão');
-              }
-            }
-          }, 3000);
-        }
-        
-      }
-    } catch (error) {
-      console.error('Failed to start session:', error);
-      toast.error('Erro ao iniciar sessão');
-    } finally {
-      setUIState(prev => ({ ...prev, isLoading: false }));
-    }
-  };
-
-  const getQRCodeWithSession = async (sessionName: string) => {
-    try {
-      const qrBlob = await wppAPI.getQRCode(sessionName);
-      const qrUrl = URL.createObjectURL(qrBlob);
-      setQrCode(qrUrl);
-    } catch (error) {
-      console.error('Failed to get QR code:', error);
-    }
-  };
-
-  const checkConnectionWithSession = async (sessionName: string) => {
-    try {
-      console.log('Checking connection for session:', sessionName);
-      const response = await wppAPI.checkConnection(sessionName);
-      console.log('Connection check response:', JSON.stringify(response, null, 2));
-      
-      if (response.response && response.response.status) {
-        console.log('Connection is active, setting authenticated to true');
-        setIsAuthenticated(true);
-        // Add a small delay to ensure WhatsApp is fully synchronized
-        setTimeout(() => {
-          loadInitialData();
-        }, 1000);
-      } else {
-        console.log('Connection is not active, starting new session');
-        setIsAuthenticated(false);
-        // Start authentication flow if connection is not active
-        startSessionWithSession(sessionName);
-      }
-    } catch (error) {
-      console.error('Connection check failed:', error);
-      console.log('Connection check failed, starting new session');
-      setIsAuthenticated(false);
-      // Start authentication flow on error
-      startSessionWithSession(sessionName);
-    }
-  };
-
   // Helper function to validate chat ID format
   const isValidChatId = useCallback((chatId: string): boolean => {
     if (!chatId || typeof chatId !== 'string') return false;
@@ -341,7 +101,7 @@ const App: React.FC = () => {
     return id;
   };
 
-  const loadInitialData = async (retryAttempt = 0) => {
+  const loadInitialData = useCallback(async (retryAttempt = 0) => {
     const maxRetries = 2;
     const baseDelay = 3000; // 3 seconds base delay
     
@@ -471,7 +231,249 @@ const App: React.FC = () => {
     } finally {
       setUIState(prev => ({ ...prev, isLoading: false }));
     }
+  }, [isValidChatId]);
+
+  const startSessionWithSession = useCallback(async (sessionName: string) => {
+    try {
+      console.log('Starting session with name:', sessionName);
+      setUIState(prev => ({ ...prev, isLoading: true }));
+      
+      // First generate token
+      const secretKey = 'THISISMYSECURETOKEN'; // In production, this should be from environment
+      const tokenResponse = await wppAPI.generateToken(sessionName, secretKey);
+      console.log('Token generated:', JSON.stringify(tokenResponse, null, 2));
+      
+      if (tokenResponse.token) {
+        localStorage.setItem('wpp_token', tokenResponse.token);
+        wppAPI.setSession(sessionName, tokenResponse.token);
+        
+        // Start session
+        const sessionResponse = await wppAPI.startSession(sessionName, true);
+        console.log('Session started:', JSON.stringify(sessionResponse, null, 2));
+        setSessionStatus(sessionResponse);
+        
+        // Get QR code if needed - check for any status that might need QR code
+        if (sessionResponse.status === 'AUTHENTICATING' || sessionResponse.status === 'INITIALIZING' || sessionResponse.qrcode) {
+          console.log('Getting QR code for authentication, status:', sessionResponse.status);
+          if (sessionResponse.qrcode) {
+            // Use QR code from response if available
+            setQrCode(sessionResponse.qrcode);
+          } else {
+            await getQRCodeWithSession(sessionName);
+          }
+        }
+        
+        // If session is already ready or connected, set authenticated immediately
+        if (sessionResponse.status === 'READY' || sessionResponse.status === 'CONNECTED') {
+          console.log(`Session is already ${sessionResponse.status.toLowerCase()}, authenticating immediately`);
+          setIsAuthenticated(true);
+          // Add a small delay to ensure WhatsApp is fully synchronized
+          setTimeout(() => {
+            loadInitialData();
+          }, 1000);
+          return;
+        }
+        
+        // Check status periodically - only if not already ready
+        // Always start status polling since session might transition to READY
+        {
+          let statusCheckCount = 0;
+          const maxStatusChecks = 60; // Maximum 3 minutes of checking
+          const statusInterval = setInterval(async () => {
+            try {
+              statusCheckCount++;
+              console.log(`Status check #${statusCheckCount}`);
+              
+              const status = await wppAPI.getSessionStatus(sessionName);
+              console.log('Current session status:', JSON.stringify(status, null, 2));
+              setSessionStatus(status);
+              
+              // Update QR code if it changes
+              if (status.qrcode && status.qrcode !== qrCode) {
+                setQrCode(status.qrcode);
+              }
+              
+              if (status.status === 'READY' || status.status === 'CONNECTED') {
+                console.log(`Session is ${status.status.toLowerCase()}! Setting authenticated to true`);
+                clearInterval(statusInterval);
+                setIsAuthenticated(true);
+                // Add a small delay to ensure WhatsApp is fully synchronized
+                setTimeout(() => {
+                  loadInitialData();
+                }, 1000);
+              } else if (status.status === 'CLOSED' || statusCheckCount >= maxStatusChecks) {
+                console.log('Session failed or timed out, stopping status checks');
+                clearInterval(statusInterval);
+                if (statusCheckCount >= maxStatusChecks) {
+                  toast.error('Timeout na autenticação. Tente novamente.');
+                } else if (status.status === 'CLOSED') {
+                  toast.error('Sessão foi fechada. Tente novamente.');
+                }
+              }
+            } catch (error) {
+              console.error('Status check failed:', error);
+              statusCheckCount++;
+              if (statusCheckCount >= maxStatusChecks) {
+                clearInterval(statusInterval);
+                toast.error('Erro na verificação do status da sessão');
+              }
+            }
+          }, 3000);
+        }
+        
+      }
+    } catch (error) {
+      console.error('Failed to start session:', error);
+      toast.error('Erro ao iniciar sessão');
+    } finally {
+      setUIState(prev => ({ ...prev, isLoading: false }));
+    }
+  }, [qrCode, loadInitialData]);
+
+  const getQRCodeWithSession = async (sessionName: string) => {
+    try {
+      const qrBlob = await wppAPI.getQRCode(sessionName);
+      const qrUrl = URL.createObjectURL(qrBlob);
+      setQrCode(qrUrl);
+    } catch (error) {
+      console.error('Failed to get QR code:', error);
+    }
   };
+
+  const checkConnectionWithSession = useCallback(async (sessionName: string) => {
+    try {
+      console.log('Checking connection for session:', sessionName);
+      const response = await wppAPI.checkConnection(sessionName);
+      console.log('Connection check response:', JSON.stringify(response, null, 2));
+      
+      if (response.response && response.response.status) {
+        console.log('Connection is active, setting authenticated to true');
+        setIsAuthenticated(true);
+        // Add a small delay to ensure WhatsApp is fully synchronized
+        setTimeout(() => {
+          loadInitialData();
+        }, 1000);
+      } else {
+        console.log('Connection is not active, starting new session');
+        setIsAuthenticated(false);
+        // Start authentication flow if connection is not active
+        startSessionWithSession(sessionName);
+      }
+    } catch (error) {
+      console.error('Connection check failed:', error);
+      console.log('Connection check failed, starting new session');
+      setIsAuthenticated(false);
+      // Start authentication flow on error
+      startSessionWithSession(sessionName);
+    }
+  }, [startSessionWithSession, loadInitialData]);
+
+  // Initialize session on mount
+  const initializeSession = useCallback(() => {
+    const storedSession = localStorage.getItem('wpp_session') || 'default';
+    const storedToken = localStorage.getItem('wpp_token');
+    
+    setSession(storedSession);
+    
+    if (storedToken) {
+      wppAPI.setSession(storedSession, storedToken);
+      checkConnectionWithSession(storedSession);
+    } else {
+      // Start authentication flow
+      startSessionWithSession(storedSession);
+    }
+  }, [checkConnectionWithSession, startSessionWithSession]);
+
+  useEffect(() => {
+    initializeSession();
+  }, [initializeSession]);
+
+  // WebSocket listeners
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const cleanupMessage = wppAPI.onMessage((message: Message) => {
+      // Get chat ID as string from message
+      const getChatIdFromMessage = (msg: Message): string => {
+        if (typeof msg.chatId === 'string') {
+          return msg.chatId;
+        }
+        if (msg.chatId && typeof msg.chatId === 'object' && '_serialized' in msg.chatId) {
+          return (msg.chatId as any)._serialized;
+        }
+        return String(msg.chatId || '');
+      };
+
+      const chatId = getChatIdFromMessage(message);
+      const messageTimestamp = message.timestamp || message.t;
+
+      // Update chat list with new message
+      setChats(prevChats => {
+        const updatedChats = [...prevChats];
+        const chatIndex = updatedChats.findIndex(chat => {
+          const existingChatId = typeof chat.id === 'string' ? chat.id : (chat.id as any)?._serialized || String(chat.id);
+          return existingChatId === chatId;
+        });
+        
+        if (chatIndex >= 0) {
+          updatedChats[chatIndex] = {
+            ...updatedChats[chatIndex],
+            lastMessage: message,
+            timestamp: messageTimestamp,
+            unreadCount: message.fromMe ? 0 : updatedChats[chatIndex].unreadCount + 1
+          };
+          
+          // Move to top
+          const [updatedChat] = updatedChats.splice(chatIndex, 1);
+          updatedChats.unshift(updatedChat);
+        }
+        
+        return updatedChats;
+      });
+
+      // Update messages if chat is selected
+      setUIState(prev => {
+        const selectedChatId = typeof prev.selectedChat?.id === 'string'
+          ? prev.selectedChat.id
+          : (prev.selectedChat?.id as any)?._serialized || String(prev.selectedChat?.id || '');
+        
+        if (selectedChatId === chatId) {
+          return {
+            ...prev,
+            messages: [...prev.messages, message]
+          };
+        }
+        return prev;
+      });
+
+      // Show notification for new messages
+      if (!message.fromMe) {
+        console.log(message)
+        const senderName = message.senderName || message.sender?.name || message.sender?.pushname || 'Contato';
+        toast.info(`Nova mensagem de ${senderName}`);
+        
+        // Play notification sound
+        const audio = new Audio('/notification.mp3');
+        audio.play().catch(() => {
+          // Ignore if audio fails to play
+        });
+      }
+    });
+
+    const cleanupStatus = wppAPI.onConnectionStatus((status: boolean) => {
+      setIsAuthenticated(status);
+      if (!status) {
+        toast.error('Conexão perdida com o WhatsApp');
+      }
+    });
+
+    return () => {
+      cleanupMessage();
+      cleanupStatus();
+    };
+  }, [isAuthenticated]);
+
+
 
   const handleChatSelect = useCallback(async (chat: Chat) => {
     // Validate chat ID before proceeding
@@ -687,7 +689,7 @@ const App: React.FC = () => {
       console.error('Error closing session:', error);
       toast.error('Erro ao fechar sessão');
     }
-  }, [session]);
+  }, [session, checkConnectionWithSession]);
 
   const handleForceLogout = useCallback(async () => {
     try {

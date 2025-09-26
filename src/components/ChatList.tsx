@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Search, MoreVertical, MessageCircle, Settings } from 'lucide-react';
 import {
   Sidebar,
@@ -40,7 +40,6 @@ const ChatList: React.FC<ChatListProps> = ({
   currentUser,
   onOpenSettings
 }) => {
-  const [filteredResults, setFilteredResults] = useState<Chat[]>([]);
 
   // Filter and search logic
   const processedChats = useMemo(() => {

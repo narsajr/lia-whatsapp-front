@@ -13,11 +13,7 @@ import {
   HardDrive,
   HelpCircle,
   Settings,
-  Edit3,
-  Phone,
-  Link as LinkIcon,
   LogOut,
-  ChevronRight,
   Camera,
   Upload,
   Check,
@@ -118,24 +114,6 @@ const UserProfileCard = styled.div`
   }
 `;
 
-const UserAvatar = styled.div`
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background-color: ${props => props.theme.colors.primary};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-`;
-
-const AvatarImage = styled.img`
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
-`;
 
 const UserInfo = styled.div`
   flex: 1;
@@ -743,17 +721,6 @@ const UserSettings: React.FC<UserSettingsProps> = ({
       ...prev,
       [field]: value
     }));
-  };
-
-  const handleSaveProfile = () => {
-    if (onUpdateProfile) {
-      onUpdateProfile(profileData);
-    }
-  };
-
-  const getAvatarUrl = (user?: Contact): string => {
-    const name = user?.name || user?.pushname || 'User';
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=00a884&color=fff&size=120`;
   };
 
   // Handle file selection from input
