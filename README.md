@@ -1,46 +1,173 @@
-# Getting Started with Create React App
+# WhatsApp Web Clone - WPPConnect
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Uma interface moderna do WhatsApp Web desenvolvida em React com TypeScript, consumindo os serviços do wppconnect-server.
 
-## Available Scripts
+## 🚀 Características
 
-In the project directory, you can run:
+- ✅ Interface moderna e responsiva similar ao WhatsApp Web
+- ✅ Tema escuro por padrão
+- ✅ Integração completa com wppconnect-server APIs
+- ✅ WebSocket para mensagens em tempo real
+- ✅ Suporte a múltiplos tipos de mídia (imagem, vídeo, áudio, documentos)
+- ✅ Gravação de mensagens de voz
+- ✅ Sistema de resposta a mensagens
+- ✅ Busca de contatos e conversas
+- ✅ Notificações em tempo real
+- ✅ TypeScript para maior segurança de tipos
 
-### `npm start`
+## 🛠️ Tecnologias Utilizadas
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+- **React 19** com TypeScript
+- **Styled Components** para estilização
+- **Socket.IO Client** para WebSocket
+- **Axios** para requisições HTTP
+- **Lucide React** para ícones
+- **React Toastify** para notificações
+- **Mic Recorder to MP3** para gravação de áudio
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+## 📋 Pré-requisitos
 
-### `npm test`
+- Node.js 16+ 
+- wppconnect-server rodando na porta 21465
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## 🔧 Instalação
 
-### `npm run build`
+1. Clone o repositório:
+```bash
+git clone <repository-url>
+cd wppconnect-web
+```
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+2. Instale as dependências:
+```bash
+npm install --legacy-peer-deps
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+3. Configure as variáveis de ambiente no arquivo `.env`:
+```env
+REACT_APP_API_URL=http://localhost:21465/api
+REACT_APP_SOCKET_URL=http://localhost:21465
+REACT_APP_SECRET_KEY=THISISMYSECURETOKEN
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+4. Inicie o servidor de desenvolvimento:
+```bash
+npm start
+```
 
-### `npm run eject`
+5. Abra [http://localhost:3000](http://localhost:3000) no seu navegador.
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+## 🔐 Configuração do WPPConnect Server
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Certifique-se de que o wppconnect-server está rodando com as seguintes configurações:
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+```javascript
+// server.js
+const server = {
+  host: 'localhost',
+  port: 21465,
+  secretKey: 'THISISMYSECURETOKEN'
+};
+```
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+## 📱 Como Usar
 
-## Learn More
+1. **Autenticação**: Ao abrir a aplicação pela primeira vez, será exibido um QR Code
+2. **Escaneie o QR Code**: Use a câmera do WhatsApp no seu celular para escanear
+3. **Aguarde a conexão**: Após escanear, aguarde a sincronização dos dados
+4. **Comece a conversar**: Selecione um contato e comece a enviar mensagens
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+## 🎨 Interface
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+A interface foi desenvolvida para ser o mais próxima possível do WhatsApp Web oficial, incluindo:
+
+- **Sidebar**: Lista de conversas com busca
+- **Chat Area**: Área principal com mensagens
+- **Suporte a Mídia**: Visualização de imagens, vídeos, áudios e documentos
+- **Mensagens de Voz**: Gravação e reprodução de áudios
+- **Respostas**: Sistema de resposta a mensagens específicas
+
+## 📂 Estrutura do Projeto
+
+```
+src/
+├── components/           # Componentes React
+│   ├── ChatArea.tsx     # Área principal do chat
+│   ├── ChatList.tsx     # Lista de conversas
+│   └── MessageBubble.tsx # Componente de mensagem
+├── services/            # Serviços e APIs
+│   └── api.ts          # Cliente da API WPPConnect
+├── styles/             # Estilos e temas
+│   ├── GlobalStyle.ts  # Estilos globais
+│   ├── theme.ts        # Definição de temas
+│   └── styled.d.ts     # Tipos do styled-components
+├── types/              # Definições de tipos TypeScript
+│   └── index.ts        # Tipos principais
+└── App.tsx             # Componente principal
+```
+
+## 🔧 Comandos Disponíveis
+
+- `npm start` - Inicia o servidor de desenvolvimento
+- `npm run build` - Cria build de produção
+- `npm test` - Executa os testes
+- `npm run eject` - Ejeta a configuração do Create React App
+
+## 🌐 APIs Integradas
+
+A aplicação consome todas as principais APIs do wppconnect-server:
+
+- **Autenticação**: Geração de token e gerenciamento de sessão
+- **Mensagens**: Envio de texto, mídia e mensagens de voz
+- **Contatos**: Listagem e busca de contatos
+- **Grupos**: Suporte completo a grupos
+- **WebSocket**: Recebimento de mensagens em tempo real
+
+## 🎯 Funcionalidades Implementadas
+
+- [x] Autenticação via QR Code
+- [x] Lista de conversas com busca
+- [x] Visualização de mensagens
+- [x] Envio de mensagens de texto
+- [x] Envio de arquivos e imagens
+- [x] Gravação e envio de mensagens de voz
+- [x] Sistema de resposta a mensagens
+- [x] Notificações em tempo real
+- [x] Indicadores de status das mensagens
+- [x] Suporte a grupos
+- [x] Interface responsiva
+
+## 🔮 Próximas Funcionalidades
+
+- [ ] Emoji picker avançado
+- [ ] Visualização de status
+- [ ] Configurações de perfil
+- [ ] Backup e restauração de conversas
+- [ ] Tema claro
+- [ ] PWA (Progressive Web App)
+- [ ] Chamadas de voz e vídeo
+
+## 🤝 Contribuindo
+
+1. Fork o projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
+
+## 📄 Licença
+
+Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+## ⚠️ Disclaimers
+
+- Este projeto é apenas para fins educacionais e de demonstração
+- Não é afiliado ao WhatsApp Inc. ou Meta
+- Use por sua própria conta e risco
+- Respeite os termos de serviço do WhatsApp
+
+## 🙏 Agradecimentos
+
+- [WPPConnect Team](https://github.com/wppconnect-team) pela API fantástica
+- Comunidade React e TypeScript
+- Contribuidores open source
